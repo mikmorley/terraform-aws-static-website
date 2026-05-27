@@ -9,12 +9,6 @@ variable "name" {
   }
 }
 
-variable "region" {
-  type        = string
-  description = "AWS region where resources will be created."
-  default     = "us-east-1"
-}
-
 variable "s3_bucket_name" {
   type        = string
   description = "Name of an existing S3 bucket to use. If empty, a new bucket will be created with the format '{name}-{account_id}'."
