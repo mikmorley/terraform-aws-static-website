@@ -27,3 +27,8 @@ output "origin_access_control_id" {
   description = "The CloudFront origin access control ID"
   value       = aws_cloudfront_origin_access_control.oac.id
 }
+
+output "cloudfront_hosted_zone_id" {
+  description = "The hosted zone ID of the CloudFront distribution, required for Route 53 alias records."
+  value       = aws_cloudfront_distribution.s3_distribution.hosted_zone_id
+}
