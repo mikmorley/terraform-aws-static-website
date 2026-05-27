@@ -19,6 +19,7 @@ This module uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `var.cloudfront_price_class` — expose CloudFront price class with validation. Default `PriceClass_100`.
+- `var.logging_bucket` and `var.logging_prefix` — optional CloudFront access logging. Consumers supply their own logging bucket domain name; the module adds the `logging_config` block when set.
 - `var.spa_mode` — when `true`, CloudFront returns HTTP 200 for 403/404 errors and serves `index.html`, enabling client-side routing for single-page applications. Default `false`.
 - `var.tags` — consumer-supplied tags merged with module defaults (`Name`, `Environment`, `ManagedBy = "terraform"`).
 - `var.upload_sample_files` — gates sample file uploads. Default `false`. Previously the module unconditionally uploaded `index.html`, `error.html`, and a PNG to the bucket on every apply.

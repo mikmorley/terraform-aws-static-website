@@ -50,6 +50,18 @@ variable "tags" {
   default     = {}
 }
 
+variable "logging_bucket" {
+  type        = string
+  description = "Domain name of the S3 bucket to receive CloudFront access logs (e.g. my-logs-bucket.s3.amazonaws.com). If null, logging is disabled. The bucket must have ACLs enabled and grant write access to the CloudFront logging service."
+  default     = null
+}
+
+variable "logging_prefix" {
+  type        = string
+  description = "Optional key prefix for CloudFront access log files written to the logging bucket."
+  default     = ""
+}
+
 variable "spa_mode" {
   type        = bool
   description = "When true, CloudFront returns HTTP 200 for 403/404 errors and serves index.html, enabling client-side routing for single-page applications. When false (default), correct 403/404 status codes are returned."

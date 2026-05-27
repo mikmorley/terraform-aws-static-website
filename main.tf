@@ -220,6 +220,15 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
   }
 
+  dynamic "logging_config" {
+    for_each = var.logging_bucket != null ? [1] : []
+    content {
+      include_cookies = false
+      bucket          = var.logging_bucket
+      prefix          = var.logging_prefix
+    }
+  }
+
   wait_for_deployment = false
 
   tags = local.tags
