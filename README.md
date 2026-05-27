@@ -5,37 +5,12 @@
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5%201.0-blue.svg)](https://terraform.io/)
 [![AWS Provider](https://img.shields.io/badge/AWS%20Provider-%E2%89%A5%205.0-orange.svg)](https://registry.terraform.io/providers/hashicorp/aws/latest)
 
-A production-ready Terraform module that creates a secure, scalable static website infrastructure on AWS. This module provisions a private S3 bucket for hosting static content and a CloudFront distribution for global content delivery, ensuring the S3 bucket is only accessible through CloudFront (no direct public access).
+Hosting a static website on AWS the right way involves more than dropping files in an S3 bucket. You need a CloudFront distribution in front of it, an origin access policy that prevents direct bucket access, a bucket policy with the right conditions, public access blocks, versioning, error page handling, and certificate configuration. Done manually, that is a dozen resources and several security decisions that are easy to get wrong.
 
-![Architecture Diagram](files/s3-website-cloudfront.png)
-
-## Features
-
-🔒 **Security First**
-- Private S3 bucket with no public access
-- CloudFront Origin Access Identity (OAI) for secure content delivery
-- Explicit deny policies for public access
-- SSL/TLS enforced with minimum TLS 1.2
-- AWS account root administrative access maintained
-
-🚀 **Production Ready**
-- CloudFront global edge locations for low latency
-- Custom error pages (403/404 → error.html)
-- Automatic MIME type detection
-- S3 versioning enabled
-- Comprehensive resource tagging
-
-⚡ **Developer Friendly**
-- Terraform Registry compliant
-- Comprehensive variable validation
-- Example usage included
-- CI/CD pipeline with automated testing
-- Detailed documentation
-
-## Quick Start
+This module packages all of that into a single, well-tested block. Two required variables and you have a production-grade static website on AWS global infrastructure.
 
 ```hcl
-module "secure_website" {
+module "website" {
   source = "mikmorley/static-website/aws"
 
   name        = "my-website"
@@ -43,52 +18,85 @@ module "secure_website" {
 }
 ```
 
-## Architecture
+![Architecture Diagram](files/s3-website-cloudfront.png)
 
-This module creates the following AWS resources:
+## Why use this module
 
-- **S3 Bucket**: Private bucket for static content storage
-- **S3 Bucket Policy**: Restricts access to CloudFront OAI and AWS account root
-- **S3 Bucket Versioning**: Enables object versioning for content history
-- **S3 Public Access Block**: Prevents any public access configuration
-- **CloudFront Distribution**: Global CDN for content delivery
-- **CloudFront Origin Access Identity**: Secure access from CloudFront to S3
-- **S3 Objects**: Initial website files (index.html, error.html)
+**Secure by default.** The S3 bucket is never publicly accessible. Access is restricted to a specific CloudFront distribution using Origin Access Control (OAC) and `aws:SourceArn` scoping in the bucket policy, so other distributions cannot access your bucket even if misconfigured.
 
-## Usage Examples
+**Up to date.** The module uses OAC rather than the deprecated Origin Access Identity (OAI), the AWS managed `CachingOptimized` cache policy rather than the legacy `forwarded_values` block, and `BucketOwnerEnforced` ownership controls rather than ACLs.
 
-### Basic Usage
+**Registry compliant.** No provider block is declared inside the module. You configure the provider in your root module, which means the module works correctly across multi-region and multi-account setups and supports provider aliasing.
+
+**Flexible.** Bring your own bucket by setting `s3_bucket_name`, use a custom domain with an ACM certificate, inject your own tags, choose a CloudFront price class to control cost, or wire up Route 53 alias records using the `cloudfront_hosted_zone_id` output.
+
+## Features
+
+- Private S3 bucket with all public access blocked
+- CloudFront Origin Access Control (OAC) scoped to this distribution
+- Bucket policy denies all access except from the specific distribution and account IAM principals
+- HTTPS enforced with minimum TLS 1.2
+- Custom 403/404 error pages
+- S3 versioning enabled
+- Works with an existing bucket or creates a new one
+- Custom domain and ACM certificate support (optional)
+
+## Quick Start
 
 ```hcl
+provider "aws" {
+  region = "us-east-1"
+}
+
 module "website" {
   source = "mikmorley/static-website/aws"
 
-  name        = "company-website"
+  name        = "my-website"
   environment = "Production"
-  region      = "us-west-2"
-}
-
-output "website_url" {
-  value = "https://${module.website.cloudfront_url}"
 }
 ```
+
+No certificate is required for the default CloudFront domain. Supply `cloudfront_certificate_arn` only when using custom aliases.
+
+## Usage Examples
 
 ### Custom Domain with SSL Certificate
 
 ```hcl
+provider "aws" {
+  region = "us-east-1"
+}
+
 module "website" {
   source = "mikmorley/static-website/aws"
 
   name        = "company-website"
   environment = "Production"
-  
-  # Custom domain configuration
-  cloudfront_aliases          = ["www.example.com", "example.com"]
-  cloudfront_certificate_arn  = "arn:aws:acm:us-east-1:123456789012:certificate/abcd1234-a123-456a-a12b-a123b4cd56ef"
+
+  cloudfront_aliases         = ["www.example.com", "example.com"]
+  cloudfront_certificate_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abcd1234-a123-456a-a12b-a123b4cd56ef"
 }
 ```
 
-### Using Existing S3 Bucket
+### Route 53 Alias Record
+
+The module outputs `cloudfront_hosted_zone_id` for use with Route 53 alias records:
+
+```hcl
+resource "aws_route53_record" "www" {
+  zone_id = var.hosted_zone_id
+  name    = "www.example.com"
+  type    = "A"
+
+  alias {
+    name                   = module.website.cloudfront_url
+    zone_id                = module.website.cloudfront_hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+```
+
+### Using an Existing S3 Bucket
 
 ```hcl
 module "website" {
@@ -99,6 +107,17 @@ module "website" {
   environment    = "Production"
 }
 ```
+
+## Architecture
+
+This module creates the following AWS resources:
+
+- **S3 Bucket**: Private bucket for static content (created unless `s3_bucket_name` is provided)
+- **S3 Bucket Policy**: Allows access only from the CloudFront distribution and account IAM principals
+- **S3 Bucket Versioning**: Object versioning for content history
+- **S3 Public Access Block**: Prevents any public access configuration
+- **CloudFront Distribution**: Global CDN with OAC-based S3 origin
+- **CloudFront Origin Access Control**: Sigv4-signed requests scoped to this distribution
 
 ## Requirements
 
@@ -112,90 +131,56 @@ module "website" {
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|----------|
 | name | Name of the stack/project. Used for resource naming and tagging. | `string` | `"static-website"` | no |
-| region | AWS region where resources will be created. | `string` | `"us-east-1"` | no |
-| s3_bucket_name | Name of an existing S3 bucket to use. If empty, a new bucket will be created with the format '{name}-{account_id}'. | `string` | `""` | no |
-| environment | Environment name for resource tagging (e.g., Development, Staging, Production). | `string` | `"Production"` | no |
-| cloudfront_aliases | List of CNAMEs (alternate domain names) for the CloudFront distribution. Leave empty to use the default *.cloudfront.net domain. | `list(string)` | `[]` | no |
-| cloudfront_certificate_arn | ARN of the AWS Certificate Manager certificate to use for CloudFront HTTPS. Required when cloudfront_aliases is specified. | `string` | `null` | no |
+| environment | Environment for tagging. Must be `Development`, `Staging`, or `Production`. | `string` | `"Production"` | no |
+| s3_bucket_name | Existing S3 bucket to use. If empty, a new bucket is created as `{name}-{account_id}`. | `string` | `""` | no |
+| cloudfront_aliases | Alternate domain names for the CloudFront distribution. | `list(string)` | `[]` | no |
+| cloudfront_certificate_arn | ACM certificate ARN for CloudFront HTTPS. Must be in us-east-1. Required when `cloudfront_aliases` is set. | `string` | `null` | no |
+| cloudfront_price_class | CloudFront price class. `PriceClass_100` covers US/EU (cheapest), `PriceClass_200` adds more regions, `PriceClass_All` uses all edge locations. | `string` | `"PriceClass_100"` | no |
+| logging_bucket | Domain name of the S3 bucket to receive CloudFront access logs (e.g. `my-logs.s3.amazonaws.com`). If null, logging is disabled. | `string` | `null` | no |
+| logging_prefix | Key prefix for CloudFront access log files in the logging bucket. | `string` | `""` | no |
+| spa_mode | When true, CloudFront returns HTTP 200 for 403/404 errors and serves `index.html`, enabling client-side routing for single-page applications. | `bool` | `false` | no |
+| tags | Additional tags to merge with module-managed tags (`Name`, `Environment`, `ManagedBy`). | `map(string)` | `{}` | no |
+| upload_sample_files | When true, uploads sample `index.html` and `error.html` files to the bucket. | `bool` | `false` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| cloudfront_url | The domain name of the CloudFront distribution |
-| cloudfront_distribution_id | The identifier for the CloudFront distribution |
-| s3_bucket_name | The name of the S3 bucket used for hosting the static website |
-| s3_bucket_arn | The ARN of the S3 bucket |
-| s3_bucket_domain_name | The bucket domain name of the S3 bucket |
-| origin_access_identity_id | The CloudFront origin access identity ID |
+| cloudfront_url | Domain name of the CloudFront distribution |
+| cloudfront_distribution_id | Identifier for the CloudFront distribution |
+| cloudfront_hosted_zone_id | Hosted zone ID of the CloudFront distribution, required for Route 53 alias records |
+| s3_bucket_name | Name of the S3 bucket |
+| s3_bucket_arn | ARN of the S3 bucket |
+| s3_bucket_domain_name | Bucket domain name of the S3 bucket |
+| origin_access_control_id | ID of the CloudFront origin access control |
 
-## Security Considerations
+## Security
 
-### Access Control
-- **S3 Bucket**: Private with no public access
-- **CloudFront OAI**: Read-only access to S3 objects
-- **AWS Account Root**: Full administrative access for management
-- **Public Access**: Explicitly denied with conditional statements
+**Access control**: The bucket policy has two statements. The first allows `s3:GetObject` from the CloudFront service principal, conditioned on `aws:SourceArn` matching this specific distribution. The second denies all other access unless the request comes from an IAM principal in the same AWS account.
 
-### SSL/TLS Configuration
-- **HTTPS Only**: CloudFront enforces HTTPS redirection
-- **Minimum TLS 1.2**: Modern encryption standards
-- **Custom Certificates**: Support for ACM certificates (must be in us-east-1)
+**HTTPS**: CloudFront redirects all HTTP to HTTPS and enforces TLS 1.2 minimum.
 
-### Content Security
-- **Error Handling**: Custom 403/404 pages prevent information disclosure
-- **Versioning**: S3 object versioning for content history
-- **MIME Types**: Automatic content-type detection prevents XSS
+**Custom certificates**: ACM certificates must be issued in `us-east-1` (CloudFront requirement).
 
-## Deployment
-
-1. **Configure AWS Credentials**
-   ```bash
-   aws configure
-   ```
-
-2. **Initialize Terraform**
-   ```bash
-   terraform init
-   ```
-
-3. **Plan Deployment**
-   ```bash
-   terraform plan
-   ```
-
-4. **Apply Configuration**
-   ```bash
-   terraform apply
-   ```
-
-5. **Upload Website Content**
-   ```bash
-   aws s3 sync ./website-files s3://your-bucket-name/
-   ```
+**Error pages**: 403 and 404 responses are mapped to `error.html` to avoid leaking bucket structure.
 
 ## Custom Domain Setup
 
-To use a custom domain:
-
-1. **Create ACM Certificate** (must be in us-east-1 for CloudFront):
+1. Request an ACM certificate in `us-east-1`:
    ```bash
-   aws acm request-certificate --domain-name example.com --domain-name www.example.com --region us-east-1
+   aws acm request-certificate \
+     --domain-name example.com \
+     --subject-alternative-names www.example.com \
+     --region us-east-1
    ```
 
-2. **Configure DNS**:
-   - Create CNAME records pointing to the CloudFront distribution
-   - Or use Route 53 alias records for the apex domain
+2. Set `cloudfront_aliases` and `cloudfront_certificate_arn` in the module block.
 
-3. **Update Module Configuration**:
-   ```hcl
-   cloudfront_aliases          = ["www.example.com", "example.com"]
-   cloudfront_certificate_arn  = "arn:aws:acm:us-east-1:123456789012:certificate/..."
-   ```
+3. Create DNS records pointing to the CloudFront distribution. Use Route 53 alias records (with `cloudfront_hosted_zone_id`) for the apex domain, or CNAME records for subdomains.
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines and submit pull requests to the `main` branch.
+Contributions are welcome. Please submit pull requests to the `main` branch.
 
 ## License
 
@@ -210,7 +195,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-For questions, issues, or contributions:
-- 🐛 [Report Issues](https://github.com/mikmorley/terraform-aws-static-website/issues)
-- 📖 [View Documentation](https://github.com/mikmorley/terraform-aws-static-website)
-- 💡 [Request Features](https://github.com/mikmorley/terraform-aws-static-website/issues)
+- [Report Issues](https://github.com/mikmorley/terraform-aws-static-website/issues)
+- [View Documentation](https://github.com/mikmorley/terraform-aws-static-website)
+- [Request Features](https://github.com/mikmorley/terraform-aws-static-website/issues)

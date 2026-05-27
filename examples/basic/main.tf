@@ -1,9 +1,12 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
 module "static_website" {
   source = "../../"
 
   name        = "my-static-website"
   environment = "Production"
-  region      = "us-east-1"
 
   # Optional: Use custom domain
   # cloudfront_aliases          = ["www.example.com", "example.com"]

@@ -1,12 +1,32 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+data "aws_s3_bucket" "existing" {
+  count  = local.create_bucket ? 0 : 1
+  bucket = var.s3_bucket_name
+}
+
 locals {
   account_id   = data.aws_caller_identity.current.account_id
   s3_origin_id = "s3-website"
 
   # If var.s3_bucket_name is not set, a new bucket will be created.
-  create_bucket = var.s3_bucket_name == "" ? 1 : 0
-  bucket_name   = local.create_bucket == 1 ? "${var.name}-${local.account_id}" : var.s3_bucket_name
+  create_bucket = var.s3_bucket_name == ""
+  bucket_name   = local.create_bucket ? "${var.name}-${local.account_id}" : var.s3_bucket_name
+
+  tags = merge(var.tags, {
+    Name        = var.name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
+
+  bucket_domain_name = one(concat(
+    aws_s3_bucket.website[*].bucket_regional_domain_name,
+    data.aws_s3_bucket.existing[*].bucket_regional_domain_name,
+  ))
 
   mime_types = {
     html  = "text/html"
@@ -25,51 +45,41 @@ locals {
 
 # Create S3 Bucket
 resource "aws_s3_bucket" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = local.bucket_name
 
-  tags = {
-    Environment = var.environment
-  }
+  tags = local.tags
 }
 
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# S3 Bucket ACL
-resource "aws_s3_bucket_acl" "website" {
-  count      = local.create_bucket
-  bucket     = aws_s3_bucket.website[0].id
-  acl        = "private"
-  depends_on = [aws_s3_bucket_ownership_controls.website]
-}
-
 # S3 Bucket Ownership Controls
 resource "aws_s3_bucket_ownership_controls" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
 
   rule {
-    object_ownership = "BucketOwnerPreferred"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
 # S3 Bucket Policy
 resource "aws_s3_bucket_policy" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
   policy = data.aws_iam_policy_document.s3_bucket_policy.json
 }
 
-# S3 Bucket Policy allowing access from CloudFront and AWS account root
+# S3 Bucket Policy: allow this CloudFront distribution via OAC; deny everything else
 data "aws_iam_policy_document" "s3_bucket_policy" {
-  # Allow CloudFront OAI to read objects
+  # Allow CloudFront OAC to read objects, scoped to this distribution
   statement {
     sid = "AllowCloudFrontAccess"
     actions = [
@@ -79,32 +89,17 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
       "arn:aws:s3:::${local.bucket_name}/*",
     ]
     principals {
-      type = "AWS"
-      identifiers = [
-        aws_cloudfront_origin_access_identity.origin_access_identity.iam_arn,
-      ]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudfront_distribution.s3_distribution.arn]
     }
   }
 
-  # Allow AWS account root full access for administration
-  statement {
-    sid = "AllowRootAccountAccess"
-    actions = [
-      "s3:*",
-    ]
-    resources = [
-      "arn:aws:s3:::${local.bucket_name}",
-      "arn:aws:s3:::${local.bucket_name}/*",
-    ]
-    principals {
-      type = "AWS"
-      identifiers = [
-        "arn:aws:iam::${local.account_id}:root",
-      ]
-    }
-  }
-
-  # Deny all public access (explicit deny for security)
+  # Deny all access except from this distribution or account IAM principals
   statement {
     sid    = "DenyPublicAccess"
     effect = "Deny"
@@ -121,23 +116,20 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
     }
     condition {
       test     = "StringNotEquals"
-      variable = "aws:PrincipalServiceName"
-      values   = ["cloudfront.amazonaws.com"]
+      variable = "aws:SourceArn"
+      values   = [aws_cloudfront_distribution.s3_distribution.arn]
     }
     condition {
       test     = "StringNotLike"
       variable = "aws:PrincipalArn"
-      values = [
-        "arn:aws:iam::${local.account_id}:*",
-        aws_cloudfront_origin_access_identity.origin_access_identity.iam_arn
-      ]
+      values   = ["arn:aws:iam::${local.account_id}:*"]
     }
   }
 }
 
 # S3 Bucket Public Access Block
 resource "aws_s3_bucket_public_access_block" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
 
   block_public_acls       = true
@@ -146,9 +138,8 @@ resource "aws_s3_bucket_public_access_block" "website" {
   restrict_public_buckets = true
 }
 
-# Add initial static web files to s3 for validation of infrastructure
 resource "aws_s3_object" "root" {
-  for_each = fileset("${path.module}/files/", "**")
+  for_each = var.upload_sample_files ? fileset("${path.module}/files/", "**") : toset([])
 
   bucket = local.bucket_name
   key    = each.value
@@ -160,17 +151,11 @@ resource "aws_s3_object" "root" {
 
 # CloudFront Distribution
 resource "aws_cloudfront_distribution" "s3_distribution" {
-  depends_on = [
-    aws_s3_bucket.website[0]
-  ]
-
   origin {
-    domain_name = aws_s3_bucket.website[0].bucket_regional_domain_name
+    domain_name = local.bucket_domain_name
     origin_id   = local.s3_origin_id
 
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.origin_access_identity.cloudfront_access_identity_path
-    }
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   enabled             = true
@@ -192,21 +177,11 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
     target_origin_id = local.s3_origin_id
 
-    forwarded_values {
-      query_string = false
-
-      cookies {
-        forward = "none"
-      }
-    }
-
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
     viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 86400
-    max_ttl                = 31536000
   }
 
-  price_class = "PriceClass_All"
+  price_class = var.cloudfront_price_class
 
   restrictions {
     geo_restriction {
@@ -214,34 +189,54 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     }
   }
 
-  viewer_certificate {
-    cloudfront_default_certificate = false
-    acm_certificate_arn            = var.cloudfront_certificate_arn
-    ssl_support_method             = "sni-only"
-    minimum_protocol_version       = "TLSv1.2_2021"
+  dynamic "viewer_certificate" {
+    for_each = var.cloudfront_certificate_arn != null ? [1] : []
+    content {
+      cloudfront_default_certificate = false
+      acm_certificate_arn            = var.cloudfront_certificate_arn
+      ssl_support_method             = "sni-only"
+      minimum_protocol_version       = "TLSv1.2_2021"
+    }
+  }
+
+  dynamic "viewer_certificate" {
+    for_each = var.cloudfront_certificate_arn == null ? [1] : []
+    content {
+      cloudfront_default_certificate = true
+    }
   }
 
   custom_error_response {
     error_code            = 403
-    response_code         = 200
-    error_caching_min_ttl = 0
-    response_page_path    = "/error.html"
+    response_code         = var.spa_mode ? 200 : 403
+    error_caching_min_ttl = 10
+    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
   }
 
   custom_error_response {
     error_code            = 404
-    response_code         = 200
-    error_caching_min_ttl = 0
-    response_page_path    = "/error.html"
+    response_code         = var.spa_mode ? 200 : 404
+    error_caching_min_ttl = 10
+    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
+  }
+
+  dynamic "logging_config" {
+    for_each = var.logging_bucket != null ? [1] : []
+    content {
+      include_cookies = false
+      bucket          = var.logging_bucket
+      prefix          = var.logging_prefix
+    }
   }
 
   wait_for_deployment = false
 
-  tags = {
-    Environment = var.environment
-  }
+  tags = local.tags
 }
 
-resource "aws_cloudfront_origin_access_identity" "origin_access_identity" {
-  comment = "access-identity-${local.bucket_name}.s3.amazonaws.com"
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = local.bucket_name
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
