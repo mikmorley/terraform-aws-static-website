@@ -52,21 +52,13 @@ resource "aws_s3_bucket_versioning" "website" {
   }
 }
 
-# S3 Bucket ACL
-resource "aws_s3_bucket_acl" "website" {
-  count      = local.create_bucket
-  bucket     = aws_s3_bucket.website[0].id
-  acl        = "private"
-  depends_on = [aws_s3_bucket_ownership_controls.website]
-}
-
 # S3 Bucket Ownership Controls
 resource "aws_s3_bucket_ownership_controls" "website" {
   count  = local.create_bucket
   bucket = aws_s3_bucket.website[0].id
 
   rule {
-    object_ownership = "BucketOwnerPreferred"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
