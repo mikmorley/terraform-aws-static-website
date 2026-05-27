@@ -77,7 +77,7 @@ resource "aws_s3_bucket_policy" "website" {
   policy = data.aws_iam_policy_document.s3_bucket_policy.json
 }
 
-# S3 Bucket Policy allowing access from CloudFront and AWS account root
+# S3 Bucket Policy: allow this CloudFront distribution via OAC; deny everything else
 data "aws_iam_policy_document" "s3_bucket_policy" {
   # Allow CloudFront OAC to read objects, scoped to this distribution
   statement {
@@ -99,25 +99,7 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
     }
   }
 
-  # Allow AWS account root full access for administration
-  statement {
-    sid = "AllowRootAccountAccess"
-    actions = [
-      "s3:*",
-    ]
-    resources = [
-      "arn:aws:s3:::${local.bucket_name}",
-      "arn:aws:s3:::${local.bucket_name}/*",
-    ]
-    principals {
-      type = "AWS"
-      identifiers = [
-        "arn:aws:iam::${local.account_id}:root",
-      ]
-    }
-  }
-
-  # Deny all public access (explicit deny for security)
+  # Deny all access except from this distribution or account IAM principals
   statement {
     sid    = "DenyPublicAccess"
     effect = "Deny"
@@ -134,8 +116,8 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
     }
     condition {
       test     = "StringNotEquals"
-      variable = "aws:PrincipalServiceName"
-      values   = ["cloudfront.amazonaws.com"]
+      variable = "aws:SourceArn"
+      values   = [aws_cloudfront_distribution.s3_distribution.arn]
     }
     condition {
       test     = "StringNotLike"
