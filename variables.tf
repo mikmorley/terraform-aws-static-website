@@ -50,6 +50,17 @@ variable "tags" {
   default     = {}
 }
 
+variable "cloudfront_price_class" {
+  type        = string
+  description = "CloudFront price class. PriceClass_100 covers US/EU only (cheapest), PriceClass_200 adds more regions, PriceClass_All uses all edge locations."
+  default     = "PriceClass_100"
+
+  validation {
+    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.cloudfront_price_class)
+    error_message = "cloudfront_price_class must be one of: PriceClass_100, PriceClass_200, PriceClass_All."
+  }
+}
+
 variable "upload_sample_files" {
   type        = bool
   description = "When true, uploads sample index.html and error.html files to the bucket. Disabled by default to avoid overwriting consumer content."
