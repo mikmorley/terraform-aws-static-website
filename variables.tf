@@ -44,6 +44,12 @@ variable "cloudfront_aliases" {
   }
 }
 
+variable "tags" {
+  type        = map(string)
+  description = "Additional tags to apply to all taggable resources. Merged with module-managed tags (Name, Environment, ManagedBy)."
+  default     = {}
+}
+
 variable "upload_sample_files" {
   type        = bool
   description = "When true, uploads sample index.html and error.html files to the bucket. Disabled by default to avoid overwriting consumer content."

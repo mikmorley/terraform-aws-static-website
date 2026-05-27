@@ -13,6 +13,12 @@ locals {
   create_bucket = var.s3_bucket_name == "" ? 1 : 0
   bucket_name   = local.create_bucket == 1 ? "${var.name}-${local.account_id}" : var.s3_bucket_name
 
+  tags = merge(var.tags, {
+    Name        = var.name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
+
   bucket_domain_name = one(concat(
     aws_s3_bucket.website[*].bucket_regional_domain_name,
     data.aws_s3_bucket.existing[*].bucket_regional_domain_name,
@@ -38,9 +44,7 @@ resource "aws_s3_bucket" "website" {
   count  = local.create_bucket
   bucket = local.bucket_name
 
-  tags = {
-    Environment = var.environment
-  }
+  tags = local.tags
 }
 
 # S3 Bucket Versioning
@@ -224,9 +228,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
   wait_for_deployment = false
 
-  tags = {
-    Environment = var.environment
-  }
+  tags = local.tags
 }
 
 resource "aws_cloudfront_origin_access_control" "oac" {
