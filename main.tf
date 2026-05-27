@@ -79,7 +79,7 @@ resource "aws_s3_bucket_policy" "website" {
 
 # S3 Bucket Policy allowing access from CloudFront and AWS account root
 data "aws_iam_policy_document" "s3_bucket_policy" {
-  # Allow CloudFront OAI to read objects
+  # Allow CloudFront OAC to read objects, scoped to this distribution
   statement {
     sid = "AllowCloudFrontAccess"
     actions = [
@@ -89,10 +89,13 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
       "arn:aws:s3:::${local.bucket_name}/*",
     ]
     principals {
-      type = "AWS"
-      identifiers = [
-        aws_cloudfront_origin_access_identity.origin_access_identity.iam_arn,
-      ]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudfront_distribution.s3_distribution.arn]
     }
   }
 
@@ -137,10 +140,7 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
     condition {
       test     = "StringNotLike"
       variable = "aws:PrincipalArn"
-      values = [
-        "arn:aws:iam::${local.account_id}:*",
-        aws_cloudfront_origin_access_identity.origin_access_identity.iam_arn
-      ]
+      values   = ["arn:aws:iam::${local.account_id}:*"]
     }
   }
 }
@@ -174,9 +174,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     domain_name = local.bucket_domain_name
     origin_id   = local.s3_origin_id
 
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.origin_access_identity.cloudfront_access_identity_path
-    }
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   enabled             = true
@@ -258,6 +256,9 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
   }
 }
 
-resource "aws_cloudfront_origin_access_identity" "origin_access_identity" {
-  comment = "access-identity-${local.bucket_name}.s3.amazonaws.com"
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = local.bucket_name
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }

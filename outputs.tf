@@ -23,7 +23,7 @@ output "s3_bucket_domain_name" {
   value       = local.create_bucket == 1 ? aws_s3_bucket.website[0].bucket_domain_name : "${var.s3_bucket_name}.s3.amazonaws.com"
 }
 
-output "origin_access_identity_id" {
-  description = "The CloudFront origin access identity ID"
-  value       = aws_cloudfront_origin_access_identity.origin_access_identity.id
+output "origin_access_control_id" {
+  description = "The CloudFront origin access control ID"
+  value       = aws_cloudfront_origin_access_control.oac.id
 }
