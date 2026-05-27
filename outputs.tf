@@ -10,17 +10,17 @@ output "cloudfront_distribution_id" {
 
 output "s3_bucket_name" {
   description = "The name of the S3 bucket used for hosting the static website"
-  value       = local.create_bucket == 1 ? aws_s3_bucket.website[0].id : var.s3_bucket_name
+  value       = local.create_bucket ? aws_s3_bucket.website[0].id : var.s3_bucket_name
 }
 
 output "s3_bucket_arn" {
   description = "The ARN of the S3 bucket"
-  value       = local.create_bucket == 1 ? aws_s3_bucket.website[0].arn : "arn:aws:s3:::${var.s3_bucket_name}"
+  value       = local.create_bucket ? aws_s3_bucket.website[0].arn : "arn:aws:s3:::${var.s3_bucket_name}"
 }
 
 output "s3_bucket_domain_name" {
   description = "The bucket domain name of the S3 bucket"
-  value       = local.create_bucket == 1 ? aws_s3_bucket.website[0].bucket_domain_name : "${var.s3_bucket_name}.s3.amazonaws.com"
+  value       = local.create_bucket ? aws_s3_bucket.website[0].bucket_domain_name : "${var.s3_bucket_name}.s3.amazonaws.com"
 }
 
 output "origin_access_control_id" {

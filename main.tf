@@ -5,7 +5,7 @@ data "aws_cloudfront_cache_policy" "caching_optimized" {
 }
 
 data "aws_s3_bucket" "existing" {
-  count  = 1 - local.create_bucket
+  count  = local.create_bucket ? 0 : 1
   bucket = var.s3_bucket_name
 }
 
@@ -14,8 +14,8 @@ locals {
   s3_origin_id = "s3-website"
 
   # If var.s3_bucket_name is not set, a new bucket will be created.
-  create_bucket = var.s3_bucket_name == "" ? 1 : 0
-  bucket_name   = local.create_bucket == 1 ? "${var.name}-${local.account_id}" : var.s3_bucket_name
+  create_bucket = var.s3_bucket_name == ""
+  bucket_name   = local.create_bucket ? "${var.name}-${local.account_id}" : var.s3_bucket_name
 
   tags = merge(var.tags, {
     Name        = var.name
@@ -45,7 +45,7 @@ locals {
 
 # Create S3 Bucket
 resource "aws_s3_bucket" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = local.bucket_name
 
   tags = local.tags
@@ -53,7 +53,7 @@ resource "aws_s3_bucket" "website" {
 
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
   versioning_configuration {
     status = "Enabled"
@@ -62,7 +62,7 @@ resource "aws_s3_bucket_versioning" "website" {
 
 # S3 Bucket Ownership Controls
 resource "aws_s3_bucket_ownership_controls" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
 
   rule {
@@ -72,7 +72,7 @@ resource "aws_s3_bucket_ownership_controls" "website" {
 
 # S3 Bucket Policy
 resource "aws_s3_bucket_policy" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
   policy = data.aws_iam_policy_document.s3_bucket_policy.json
 }
@@ -129,7 +129,7 @@ data "aws_iam_policy_document" "s3_bucket_policy" {
 
 # S3 Bucket Public Access Block
 resource "aws_s3_bucket_public_access_block" "website" {
-  count  = local.create_bucket
+  count  = local.create_bucket ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
 
   block_public_acls       = true
