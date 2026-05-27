@@ -1,5 +1,9 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
 data "aws_s3_bucket" "existing" {
   count  = 1 - local.create_bucket
   bucket = var.s3_bucket_name
@@ -173,18 +177,8 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
     target_origin_id = local.s3_origin_id
 
-    forwarded_values {
-      query_string = false
-
-      cookies {
-        forward = "none"
-      }
-    }
-
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
     viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 86400
-    max_ttl                = 31536000
   }
 
   price_class = var.cloudfront_price_class
