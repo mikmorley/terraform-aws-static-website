@@ -1,5 +1,10 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_s3_bucket" "existing" {
+  count  = 1 - local.create_bucket
+  bucket = var.s3_bucket_name
+}
+
 locals {
   account_id   = data.aws_caller_identity.current.account_id
   s3_origin_id = "s3-website"
@@ -7,6 +12,11 @@ locals {
   # If var.s3_bucket_name is not set, a new bucket will be created.
   create_bucket = var.s3_bucket_name == "" ? 1 : 0
   bucket_name   = local.create_bucket == 1 ? "${var.name}-${local.account_id}" : var.s3_bucket_name
+
+  bucket_domain_name = one(concat(
+    aws_s3_bucket.website[*].bucket_regional_domain_name,
+    data.aws_s3_bucket.existing[*].bucket_regional_domain_name,
+  ))
 
   mime_types = {
     html  = "text/html"
@@ -160,12 +170,8 @@ resource "aws_s3_object" "root" {
 
 # CloudFront Distribution
 resource "aws_cloudfront_distribution" "s3_distribution" {
-  depends_on = [
-    aws_s3_bucket.website[0]
-  ]
-
   origin {
-    domain_name = aws_s3_bucket.website[0].bucket_regional_domain_name
+    domain_name = local.bucket_domain_name
     origin_id   = local.s3_origin_id
 
     s3_origin_config {
