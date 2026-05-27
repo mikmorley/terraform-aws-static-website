@@ -44,6 +44,12 @@ variable "cloudfront_aliases" {
   }
 }
 
+variable "upload_sample_files" {
+  type        = bool
+  description = "When true, uploads sample index.html and error.html files to the bucket. Disabled by default to avoid overwriting consumer content."
+  default     = false
+}
+
 variable "cloudfront_certificate_arn" {
   type        = string
   description = "ARN of the AWS Certificate Manager certificate to use for CloudFront HTTPS. Required when cloudfront_aliases is specified."

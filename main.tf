@@ -138,9 +138,8 @@ resource "aws_s3_bucket_public_access_block" "website" {
   restrict_public_buckets = true
 }
 
-# Add initial static web files to s3 for validation of infrastructure
 resource "aws_s3_object" "root" {
-  for_each = fileset("${path.module}/files/", "**")
+  for_each = var.upload_sample_files ? fileset("${path.module}/files/", "**") : toset([])
 
   bucket = local.bucket_name
   key    = each.value
