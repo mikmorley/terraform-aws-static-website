@@ -15,7 +15,7 @@ on:
       - '.github/workflows/terraform-validation.yml'
 
 env:
-  TF_VERSION: '1.5.0'
+  TF_VERSION: 'latest'
 
 jobs:
   terraform-validate:
