@@ -19,6 +19,7 @@ This module uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `var.cloudfront_price_class` — expose CloudFront price class with validation. Default `PriceClass_100`.
+- `var.spa_mode` — when `true`, CloudFront returns HTTP 200 for 403/404 errors and serves `index.html`, enabling client-side routing for single-page applications. Default `false`.
 - `var.tags` — consumer-supplied tags merged with module defaults (`Name`, `Environment`, `ManagedBy = "terraform"`).
 - `var.upload_sample_files` — gates sample file uploads. Default `false`. Previously the module unconditionally uploaded `index.html`, `error.html`, and a PNG to the bucket on every apply.
 - `output.cloudfront_hosted_zone_id` — hosted zone ID required for Route 53 alias records.
@@ -31,6 +32,7 @@ This module uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Bucket policy tightened.** The `DenyPublicAccess` statement now uses `aws:SourceArn` instead of the broad `aws:PrincipalServiceName` condition. The redundant `AllowRootAccountAccess` statement has been removed — account IAM principals are permitted by the deny condition logic.
 - **Viewer certificate is now conditional.** When no `cloudfront_certificate_arn` is provided the module uses `cloudfront_default_certificate = true`, so the module works with the default CloudFront domain without requiring an ACM certificate.
 - **Cache policy updated.** Replaced the deprecated `forwarded_values` block with the AWS managed `CachingOptimized` policy, resolved dynamically by name via a data source.
+- **Custom error responses corrected.** 403 and 404 errors now return the correct HTTP status code by default instead of 200. `error_caching_min_ttl` raised from 0 to 10 seconds to avoid hammering the origin during error conditions. Set `spa_mode = true` to restore the previous 200 behaviour for single-page applications.
 - **ACLs removed.** Replaced `aws_s3_bucket_acl` (BucketOwnerPreferred) with `BucketOwnerEnforced` ownership controls. ACLs are irrelevant on a fully private bucket and can fail in accounts with SCPs that block ACL operations.
 - **`local.create_bucket` is now a bool.** All `count` expressions use `local.create_bucket ? 1 : 0` instead of int comparisons.
 - CI Terraform version updated from `1.5.0` to `latest`.

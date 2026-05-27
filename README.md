@@ -136,6 +136,7 @@ This module creates the following AWS resources:
 | cloudfront_aliases | Alternate domain names for the CloudFront distribution. | `list(string)` | `[]` | no |
 | cloudfront_certificate_arn | ACM certificate ARN for CloudFront HTTPS. Must be in us-east-1. Required when `cloudfront_aliases` is set. | `string` | `null` | no |
 | cloudfront_price_class | CloudFront price class. `PriceClass_100` covers US/EU (cheapest), `PriceClass_200` adds more regions, `PriceClass_All` uses all edge locations. | `string` | `"PriceClass_100"` | no |
+| spa_mode | When true, CloudFront returns HTTP 200 for 403/404 errors and serves `index.html`, enabling client-side routing for single-page applications. | `bool` | `false` | no |
 | tags | Additional tags to merge with module-managed tags (`Name`, `Environment`, `ManagedBy`). | `map(string)` | `{}` | no |
 | upload_sample_files | When true, uploads sample `index.html` and `error.html` files to the bucket. | `bool` | `false` | no |
 

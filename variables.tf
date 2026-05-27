@@ -50,6 +50,12 @@ variable "tags" {
   default     = {}
 }
 
+variable "spa_mode" {
+  type        = bool
+  description = "When true, CloudFront returns HTTP 200 for 403/404 errors and serves index.html, enabling client-side routing for single-page applications. When false (default), correct 403/404 status codes are returned."
+  default     = false
+}
+
 variable "cloudfront_price_class" {
   type        = string
   description = "CloudFront price class. PriceClass_100 covers US/EU only (cheapest), PriceClass_200 adds more regions, PriceClass_All uses all edge locations."

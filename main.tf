@@ -208,16 +208,16 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
   custom_error_response {
     error_code            = 403
-    response_code         = 200
-    error_caching_min_ttl = 0
-    response_page_path    = "/error.html"
+    response_code         = var.spa_mode ? 200 : 403
+    error_caching_min_ttl = 10
+    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
   }
 
   custom_error_response {
     error_code            = 404
-    response_code         = 200
-    error_caching_min_ttl = 0
-    response_page_path    = "/error.html"
+    response_code         = var.spa_mode ? 200 : 404
+    error_caching_min_ttl = 10
+    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
   }
 
   wait_for_deployment = false
