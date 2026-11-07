@@ -7,6 +7,30 @@ This module uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `var.bucket_name` - exact name for the bucket the module creates, so a bucket with a fixed name can be adopted instead of being forced to `{name}-{account_id}`.
+- `var.comment` - CloudFront distribution comment (defaults to `name`).
+- `var.versioning_enabled` - set false to leave S3 versioning unmanaged on the bucket the module creates (default `true`).
+- `var.cache_policy_id` - override the default cache policy (default remains `Managed-CachingOptimized`).
+- `var.ordered_cache_behaviors` - extra path-based cache behaviours.
+- `var.custom_error_responses` - replaces the default 403/404 handling when set.
+
+### Changed
+
+- Minimum Terraform version raised from 1.0 to 1.3 (needed for `optional()` object attributes).
+- `cloudfront_aliases` validation now accepts a leading wildcard label (`*.example.com`).
+
+### Fixed (docs)
+
+- README now states that with `s3_bucket_name` set the module only reads the bucket and does not manage its policy.
+
+All new inputs default to the previous behaviour, so existing consumers see no plan changes.
+
+---
+
 ## [1.0.0] - 2026-05-28
 
 ### Breaking Changes

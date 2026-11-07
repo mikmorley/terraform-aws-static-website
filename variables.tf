@@ -20,6 +20,55 @@ variable "s3_bucket_name" {
   }
 }
 
+variable "bucket_name" {
+  type        = string
+  description = "Exact name for the bucket this module creates. Ignored when s3_bucket_name is set. If empty, the bucket is named '{name}-{account_id}'. Use this to adopt a bucket with a fixed name (import it into the module's aws_s3_bucket.website[0])."
+  default     = ""
+
+  validation {
+    condition     = var.bucket_name == "" || can(regex("^[a-z0-9.-]+$", var.bucket_name))
+    error_message = "Bucket name must contain only lowercase letters, numbers, periods, and hyphens."
+  }
+}
+
+variable "comment" {
+  type        = string
+  description = "Comment on the CloudFront distribution. Defaults to the value of name."
+  default     = null
+}
+
+variable "versioning_enabled" {
+  type        = bool
+  description = "When true (default), the module enables S3 versioning on the bucket it creates. When false, the module does not manage versioning at all (it does not suspend it), which suits buckets that have never had versioning enabled."
+  default     = true
+}
+
+variable "cache_policy_id" {
+  type        = string
+  description = "CloudFront cache policy ID for the default behaviour. Defaults to the AWS managed Managed-CachingOptimized policy. For example, use 4135ea2d-6df8-44a3-9df3-4b5a84be39ad for Managed-CachingDisabled."
+  default     = null
+}
+
+variable "ordered_cache_behaviors" {
+  type = list(object({
+    path_pattern    = string
+    cache_policy_id = optional(string)
+  }))
+  description = "Extra path-based cache behaviours, evaluated in order. cache_policy_id defaults to the module's default cache policy."
+  default     = []
+}
+
+variable "custom_error_responses" {
+  type = list(object({
+    error_code            = number
+    response_code         = number
+    response_page_path    = string
+    error_caching_min_ttl = optional(number, 10)
+  }))
+  description = "Custom error responses. When null (default), 403 and 404 are handled as before, controlled by spa_mode. When set, replaces that default entirely."
+  default     = null
+}
+
 variable "environment" {
   type        = string
   description = "Environment name for resource tagging (e.g., Development, Staging, Production)."
@@ -33,14 +82,14 @@ variable "environment" {
 
 variable "cloudfront_aliases" {
   type        = list(string)
-  description = "List of CNAMEs (alternate domain names) for the CloudFront distribution. Leave empty to use the default *.cloudfront.net domain."
+  description = "List of CNAMEs (alternate domain names) for the CloudFront distribution, including wildcards such as *.example.com. Leave empty to use the default *.cloudfront.net domain."
   default     = []
 
   validation {
     condition = alltrue([
-      for alias in var.cloudfront_aliases : can(regex("^[a-z0-9.-]+\\.[a-z]{2,}$", alias))
+      for alias in var.cloudfront_aliases : can(regex("^(\\*\\.)?[a-z0-9.-]+\\.[a-z]{2,}$", alias))
     ])
-    error_message = "CloudFront aliases must be valid domain names."
+    error_message = "CloudFront aliases must be valid domain names. A single leading wildcard label (*.example.com) is allowed."
   }
 }
 

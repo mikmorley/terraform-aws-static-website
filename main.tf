@@ -1,7 +1,8 @@
 data "aws_caller_identity" "current" {}
 
 data "aws_cloudfront_cache_policy" "caching_optimized" {
-  name = "Managed-CachingOptimized"
+  count = var.cache_policy_id == null ? 1 : 0
+  name  = "Managed-CachingOptimized"
 }
 
 data "aws_s3_bucket" "existing" {
@@ -15,7 +16,22 @@ locals {
 
   # If var.s3_bucket_name is not set, a new bucket will be created.
   create_bucket = var.s3_bucket_name == ""
-  bucket_name   = local.create_bucket ? "${var.name}-${local.account_id}" : var.s3_bucket_name
+  bucket_name = (
+    !local.create_bucket ? var.s3_bucket_name :
+    var.bucket_name != "" ? var.bucket_name :
+    "${var.name}-${local.account_id}"
+  )
+
+  cache_policy_id = coalesce(var.cache_policy_id, one(data.aws_cloudfront_cache_policy.caching_optimized[*].id))
+
+  error_responses = var.custom_error_responses != null ? var.custom_error_responses : [
+    for code in [403, 404] : {
+      error_code            = code
+      response_code         = var.spa_mode ? 200 : code
+      response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
+      error_caching_min_ttl = 10
+    }
+  ]
 
   tags = merge(var.tags, {
     Name        = var.name
@@ -53,7 +69,7 @@ resource "aws_s3_bucket" "website" {
 
 # S3 Bucket Versioning
 resource "aws_s3_bucket_versioning" "website" {
-  count  = local.create_bucket ? 1 : 0
+  count  = local.create_bucket && var.versioning_enabled ? 1 : 0
   bucket = aws_s3_bucket.website[0].id
   versioning_configuration {
     status = "Enabled"
@@ -160,7 +176,7 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = var.name
+  comment             = var.comment != null ? var.comment : var.name
   default_root_object = "index.html"
   aliases             = var.cloudfront_aliases
 
@@ -177,8 +193,22 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
     target_origin_id = local.s3_origin_id
 
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    cache_policy_id        = local.cache_policy_id
     viewer_protocol_policy = "redirect-to-https"
+  }
+
+  dynamic "ordered_cache_behavior" {
+    for_each = var.ordered_cache_behaviors
+
+    content {
+      path_pattern     = ordered_cache_behavior.value.path_pattern
+      allowed_methods  = ["GET", "HEAD"]
+      cached_methods   = ["GET", "HEAD"]
+      target_origin_id = local.s3_origin_id
+
+      cache_policy_id        = coalesce(ordered_cache_behavior.value.cache_policy_id, local.cache_policy_id)
+      viewer_protocol_policy = "redirect-to-https"
+    }
   }
 
   price_class = var.cloudfront_price_class
@@ -206,18 +236,15 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
     }
   }
 
-  custom_error_response {
-    error_code            = 403
-    response_code         = var.spa_mode ? 200 : 403
-    error_caching_min_ttl = 10
-    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
-  }
+  dynamic "custom_error_response" {
+    for_each = local.error_responses
 
-  custom_error_response {
-    error_code            = 404
-    response_code         = var.spa_mode ? 200 : 404
-    error_caching_min_ttl = 10
-    response_page_path    = var.spa_mode ? "/index.html" : "/error.html"
+    content {
+      error_code            = custom_error_response.value.error_code
+      response_code         = custom_error_response.value.response_code
+      error_caching_min_ttl = custom_error_response.value.error_caching_min_ttl
+      response_page_path    = custom_error_response.value.response_page_path
+    }
   }
 
   dynamic "logging_config" {

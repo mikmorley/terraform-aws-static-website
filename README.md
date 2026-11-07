@@ -96,7 +96,42 @@ resource "aws_route53_record" "www" {
 }
 ```
 
+### Naming the Bucket
+
+By default the module creates `{name}-{account_id}`. To choose the name, for example when adopting a bucket that already exists, set `bucket_name` and import the bucket into the module (`aws_s3_bucket.website[0]`):
+
+```hcl
+module "website" {
+  source = "mikmorley/static-website/aws"
+
+  name        = "company-website"
+  bucket_name = "company-website-prod"
+}
+```
+
+### Tuning Caching and Error Pages
+
+```hcl
+module "website" {
+  source = "mikmorley/static-website/aws"
+
+  name            = "company-website"
+  cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+
+  ordered_cache_behaviors = [
+    { path_pattern = "/assets/*", cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6" }, # Managed-CachingOptimized
+  ]
+
+  custom_error_responses = [
+    { error_code = 403, response_code = 200, response_page_path = "/error.html", error_caching_min_ttl = 0 },
+    { error_code = 404, response_code = 200, response_page_path = "/error.html", error_caching_min_ttl = 0 },
+  ]
+}
+```
+
 ### Using an Existing S3 Bucket
+
+With `s3_bucket_name` set, the module only reads the bucket. It does **not** create or change the bucket's policy, public access block or versioning, so you must add a bucket policy that allows this distribution (`aws:SourceArn`) to read objects. To have the module manage the bucket, use `bucket_name` instead.
 
 ```hcl
 module "website" {
@@ -123,7 +158,7 @@ This module creates the following AWS resources:
 
 | Name | Version |
 |------|---------|
-| terraform | >= 1.0 |
+| terraform | >= 1.3 |
 | aws | >= 5.0 |
 
 ## Inputs
@@ -132,7 +167,13 @@ This module creates the following AWS resources:
 |------|-------------|------|---------|----------|
 | name | Name of the stack/project. Used for resource naming and tagging. | `string` | `"static-website"` | no |
 | environment | Environment for tagging. Must be `Development`, `Staging`, or `Production`. | `string` | `"Production"` | no |
-| s3_bucket_name | Existing S3 bucket to use. If empty, a new bucket is created as `{name}-{account_id}`. | `string` | `""` | no |
+| s3_bucket_name | Existing S3 bucket to read from. The module does not manage that bucket or its policy. If empty, a new bucket is created. | `string` | `""` | no |
+| bucket_name | Exact name for the bucket the module creates (ignored when `s3_bucket_name` is set). If empty, the bucket is named `{name}-{account_id}`. | `string` | `""` | no |
+| comment | Comment on the CloudFront distribution. Defaults to `name`. | `string` | `null` | no |
+| versioning_enabled | Enable S3 versioning on the bucket the module creates. When false, versioning is left unmanaged (not suspended). | `bool` | `true` | no |
+| cache_policy_id | Cache policy ID for the default behaviour. Defaults to `Managed-CachingOptimized`. | `string` | `null` | no |
+| ordered_cache_behaviors | Extra path-based cache behaviours: `path_pattern` and optional `cache_policy_id`. | `list(object)` | `[]` | no |
+| custom_error_responses | Replaces the default 403/404 handling (which `spa_mode` controls) when set. | `list(object)` | `null` | no |
 | cloudfront_aliases | Alternate domain names for the CloudFront distribution. | `list(string)` | `[]` | no |
 | cloudfront_certificate_arn | ACM certificate ARN for CloudFront HTTPS. Must be in us-east-1. Required when `cloudfront_aliases` is set. | `string` | `null` | no |
 | cloudfront_price_class | CloudFront price class. `PriceClass_100` covers US/EU (cheapest), `PriceClass_200` adds more regions, `PriceClass_All` uses all edge locations. | `string` | `"PriceClass_100"` | no |
