@@ -129,6 +129,19 @@ module "website" {
 }
 ```
 
+### Subdirectory Index Pages
+
+CloudFront serves `index.html` for `/` only. For a site with folders (`/docs/index.html`), set `directory_index_rewrite = true`. A viewer-request CloudFront Function then maps `/docs/` to `/docs/index.html` and, unless `directory_index_redirect = false`, redirects `/docs` to `/docs/`.
+
+```hcl
+module "website" {
+  source = "mikmorley/static-website/aws"
+
+  name                    = "company-website"
+  directory_index_rewrite = true
+}
+```
+
 ### Using an Existing S3 Bucket
 
 With `s3_bucket_name` set, the module only reads the bucket. It does **not** create or change the bucket's policy, public access block or versioning, so you must add a bucket policy that allows this distribution (`aws:SourceArn`) to read objects. To have the module manage the bucket, use `bucket_name` instead.
@@ -174,6 +187,8 @@ This module creates the following AWS resources:
 | cache_policy_id | Cache policy ID for the default behaviour. Defaults to `Managed-CachingOptimized`. | `string` | `null` | no |
 | ordered_cache_behaviors | Extra path-based cache behaviours: `path_pattern` and optional `cache_policy_id`. | `list(object)` | `[]` | no |
 | custom_error_responses | Replaces the default 403/404 handling (which `spa_mode` controls) when set. | `list(object)` | `null` | no |
+| directory_index_rewrite | Attach a CloudFront Function that serves `index.html` for URLs ending in `/` (CloudFront only does this for the site root). | `bool` | `false` | no |
+| directory_index_redirect | With `directory_index_rewrite`, also 301-redirect extension-less paths (`/docs`) to `/docs/`. | `bool` | `true` | no |
 | cloudfront_aliases | Alternate domain names for the CloudFront distribution. | `list(string)` | `[]` | no |
 | cloudfront_certificate_arn | ACM certificate ARN for CloudFront HTTPS. Must be in us-east-1. Required when `cloudfront_aliases` is set. | `string` | `null` | no |
 | cloudfront_price_class | CloudFront price class. `PriceClass_100` covers US/EU (cheapest), `PriceClass_200` adds more regions, `PriceClass_All` uses all edge locations. | `string` | `"PriceClass_100"` | no |

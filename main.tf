@@ -165,6 +165,44 @@ resource "aws_s3_object" "root" {
   content_type = lookup(local.mime_types, split(".", each.value)[length(split(".", each.value)) - 1], "application/octet-stream")
 }
 
+# CloudFront Function: serve index.html for directory-style URLs.
+# CloudFront's default_root_object only applies to "/", and the S3 REST origin has no index document.
+locals {
+  directory_index_redirect_js = <<-EOT
+    if (uri.indexOf('.', uri.lastIndexOf('/')) === -1) {
+      var qs = Object.keys(request.querystring).map(function (k) {
+        var q = request.querystring[k];
+        return q.multiValue ? q.multiValue.map(function (m) { return k + '=' + m.value; }).join('&') : k + '=' + q.value;
+      }).join('&');
+      return {
+        statusCode: 301,
+        statusDescription: 'Moved Permanently',
+        headers: { location: { value: uri + '/' + (qs ? '?' + qs : '') } }
+      };
+    }
+  EOT
+}
+
+resource "aws_cloudfront_function" "directory_index" {
+  count   = var.directory_index_rewrite ? 1 : 0
+  name    = "${var.name}-directory-index"
+  runtime = "cloudfront-js-2.0"
+  comment = "Serve index.html for directory-style URLs"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+        return request;
+      }
+      ${var.directory_index_redirect ? local.directory_index_redirect_js : ""}
+      return request;
+    }
+  EOT
+}
+
 # CloudFront Distribution
 resource "aws_cloudfront_distribution" "s3_distribution" {
   origin {
@@ -195,6 +233,14 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
     cache_policy_id        = local.cache_policy_id
     viewer_protocol_policy = "redirect-to-https"
+
+    dynamic "function_association" {
+      for_each = aws_cloudfront_function.directory_index
+      content {
+        event_type   = "viewer-request"
+        function_arn = function_association.value.arn
+      }
+    }
   }
 
   dynamic "ordered_cache_behavior" {
@@ -208,6 +254,14 @@ resource "aws_cloudfront_distribution" "s3_distribution" {
 
       cache_policy_id        = coalesce(ordered_cache_behavior.value.cache_policy_id, local.cache_policy_id)
       viewer_protocol_policy = "redirect-to-https"
+
+      dynamic "function_association" {
+        for_each = aws_cloudfront_function.directory_index
+        content {
+          event_type   = "viewer-request"
+          function_arn = function_association.value.arn
+        }
+      }
     }
   }
 

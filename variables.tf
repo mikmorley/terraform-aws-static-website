@@ -69,6 +69,18 @@ variable "custom_error_responses" {
   default     = null
 }
 
+variable "directory_index_rewrite" {
+  type        = bool
+  description = "Attach a CloudFront Function that serves index.html for URLs ending in / (for example /docs/ becomes /docs/index.html). CloudFront only does this for the site root by default, so without it subdirectory URLs return the error page."
+  default     = false
+}
+
+variable "directory_index_redirect" {
+  type        = bool
+  description = "Only used when directory_index_rewrite is true. Also 301-redirect extension-less paths such as /docs to /docs/. Disable if the bucket holds real objects without a file extension."
+  default     = true
+}
+
 variable "environment" {
   type        = string
   description = "Environment name for resource tagging (e.g., Development, Staging, Production)."
