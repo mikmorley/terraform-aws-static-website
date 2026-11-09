@@ -17,6 +17,8 @@ This module uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `var.cache_policy_id` - override the default cache policy (default remains `Managed-CachingOptimized`).
 - `var.ordered_cache_behaviors` - extra path-based cache behaviours.
 - `var.custom_error_responses` - replaces the default 403/404 handling when set.
+- `var.directory_index_rewrite` - attaches a CloudFront Function so `/dir/` serves `/dir/index.html` (default `false`).
+- `var.directory_index_redirect` - with the rewrite on, also redirects extension-less paths (`/dir`) to `/dir/` (default `true`).
 
 ### Changed
 
